@@ -31,177 +31,315 @@ To start using Memphis, first install the required package:
 $ npm i --save memphis-dev
 ```
 
-#### Overview
-
-To use the NATS transporter, pass the following options object to the `createMicroservice()` method:
-
-```typescript
-@@filename(main)
-const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
-  transport: Transport.NATS,
-  options: {
-    servers: ['nats://localhost:4222'],
-  },
-});
-@@switch
-const app = await NestFactory.createMicroservice(AppModule, {
-  transport: Transport.NATS,
-  options: {
-    servers: ['nats://localhost:4222'],
-  },
-});
-```
-
-> info **Hint** The `Transport` enum is imported from the `@nestjs/microservices` package.
-
-#### Options
-
-The `options` object is specific to the chosen transporter. The <strong>NATS</strong> transporter exposes the properties described [here](https://github.com/nats-io/node-nats#connect-options).
-Additionally, there is a `queue` property which allows you to specify the name of the queue that your server should subscribe to (leave `undefined` to ignore this setting). Read more about NATS queue groups <a href="https://docs.nestjs.com/microservices/nats#queue-groups">below</a>.
-
-#### Client
-
-Like other microservice transporters, you have <a href="https://docs.nestjs.com/microservices/basics#client">several options</a> for creating a NATS `ClientProxy` instance.
-
-One method for creating an instance is to use the `ClientsModule`. To create a client instance with the `ClientsModule`, import it and use the `register()` method to pass an options object with the same properties shown above in the `createMicroservice()` method, as well as a `name` property to be used as the injection token. Read more about `ClientsModule` <a href="https://docs.nestjs.com/microservices/basics#client">here</a>.
-
-```typescript
-@Module({
-  imports: [
-    ClientsModule.register([
-      {
-        name: 'MATH_SERVICE',
-        transport: Transport.NATS,
-        options: {
-          servers: ['nats://localhost:4222'],
-        }
-      },
-    ]),
-  ]
-  ...
-})
-```
-
-Other options to create a client (either `ClientProxyFactory` or `@Client()`) can be used as well. You can read about them <a href="https://docs.nestjs.com/microservices/basics#client">here</a>.
-
-#### Request-response
-
-For the **request-response** message style ([read more](https://docs.nestjs.com/microservices/basics#request-response)), the NATS transporter does not use the NATS built-in [Request-Reply](https://docs.nats.io/nats-concepts/reqreply) mechanism. Instead, a "request" is published on a given subject using the `publish()` method with a unique reply subject name, and responders listen on that subject and send responses to the reply subject. Reply subjects are directed back to the requestor dynamically, regardless of location of either party.
-
-#### Event-based
-
-For the **event-based** message style ([read more](https://docs.nestjs.com/microservices/basics#event-based)), the NATS transporter uses NATS built-in [Publish-Subscribe](https://docs.nats.io/nats-concepts/pubsub) mechanism. A publisher sends a message on a subject and any active subscriber listening on that subject receives the message. Subscribers can also register interest in wildcard subjects that work a bit like a regular expression. This one-to-many pattern is sometimes called fan-out.
-
-#### Queue groups
-
-NATS provides a built-in load balancing feature called [distributed queues](https://docs.nats.io/nats-concepts/queue). To create a queue subscription, use the `queue` property as follows:
-
-```typescript
-@@filename(main)
-const app = await NestFactory.createMicroservice(AppModule, {
-  transport: Transport.NATS,
-  options: {
-    servers: ['nats://localhost:4222'],
-    queue: 'cats_queue',
-  },
-});
-```
-
-#### Context
-
-In more sophisticated scenarios, you may want to access more information about the incoming request. When using the NATS transporter, you can access the `NatsContext` object.
-
-```typescript
-@@filename()
-@MessagePattern('notifications')
-getNotifications(@Payload() data: number[], @Ctx() context: NatsContext) {
-  console.log(`Subject: ${context.getSubject()}`);
-}
-@@switch
-@Bind(Payload(), Ctx())
-@MessagePattern('notifications')
-getNotifications(data, context) {
-  console.log(`Subject: ${context.getSubject()}`);
-}
-```
-
-> info **Hint** `@Payload()`, `@Ctx()` and `NatsContext` are imported from the `@nestjs/microservices` package.
-
-#### Wildcards
-
-A subscription may be to an explicit subject, or it may include wildcards.
-
-```typescript
-@@filename()
-@MessagePattern('time.us.*')
-getDate(@Payload() data: number[], @Ctx() context: NatsContext) {
-  console.log(`Subject: ${context.getSubject()}`); // e.g. "time.us.east"
-  return new Date().toLocaleTimeString(...);
-}
-@@switch
-@Bind(Payload(), Ctx())
-@MessagePattern('time.us.*')
-getDate(data, context) {
-  console.log(`Subject: ${context.getSubject()}`); // e.g. "time.us.east"
-  return new Date().toLocaleTimeString(...);
-}
-```
-
-#### Record builders
-
-To configure message options, you can use the `NatsRecordBuilder` class (note: this is doable for event-based flows as well). For example, to add `x-version` header, use the `setHeaders` method, as follows:
-
-```typescript
-import * as nats from 'nats';
-
-// somewhere in your code
-const headers = nats.headers();
-headers.set('x-version', '1.0.0');
-
-const record = new NatsRecordBuilder(':cat:').setHeaders(headers).build();
-this.client.send('replace-emoji', record).subscribe(...);
-```
-
-> info **Hint** `NatsRecordBuilder` class is exported from the `@nestjs/microservices` package.
-
-And you can read these headers on the server-side as well, by accessing the `NatsContext`, as follows:
-
-```typescript
-@@filename()
-@MessagePattern('replace-emoji')
-replaceEmoji(@Payload() data: string, @Ctx() context: NatsContext): string {
-  const headers = context.getHeaders();
-  return headers['x-version'] === '1.0.0' ? '🐱' : '🐈';
-}
-@@switch
-@Bind(Payload(), Ctx())
-@MessagePattern('replace-emoji')
-replaceEmoji(data, context) {
-  const headers = context.getHeaders();
-  return headers['x-version'] === '1.0.0' ? '🐱' : '🐈';
-}
-```
-
-In some cases you might want to configure headers for multiple requests, you can pass these as options to the `ClientProxyFactory`:
-
-```typescript
+#### Importing
+```js
 import { Module } from '@nestjs/common';
-import { ClientProxyFactory, Transport } from '@nestjs/microservices';
+import { MemphisModule, MemphisService } from 'memphis-dev/nest';
+import type { Memphis } from 'memphis-dev/types';
+```
 
+#### Connecting to Memphis
+```js
 @Module({
-  providers: [
-    {
-      provide: 'API_v1',
-      useFactory: () =>
-        ClientProxyFactory.create({
-          transport: Transport.NATS,
-          options: {
-            servers: ['nats://localhost:4222'],
-            headers: { 'x-version': '1.0.0' },
-          },
-        }),
-    },
-  ],
+    imports: [MemphisModule.register()],
 })
-export class ApiModule {}
+
+class ConsumerModule {
+    constructor(private memphis: MemphisService) {}
+
+    startConnection() {
+        (async function () {
+            let memphisConnection: Memphis;
+
+            try {
+               memphisConnection = await this.memphis.connect({
+                    host: "<memphis-host>",
+                    username: "<application type username>",
+                    connectionToken: "<broker-token>",
+                });
+            } catch (ex) {
+                console.log(ex);
+                memphisConnection.close();
+            }
+        })();
+    }
+}
+```
+
+Once connected, the entire functionalities offered by Memphis are available.
+
+#### Disconnecting from Memphis
+
+To disconnect from Memphis, call `close()` on the memphis object.
+
+```js
+memphisConnection.close();
+```
+
+#### Creating a Station (= queue)
+
+```js
+@Module({
+    imports: [MemphisModule.register()],
+})
+
+class stationModule {
+    constructor(private memphis: MemphisService) { }
+
+    createStation() {
+        (async function () {
+                  const station = await this.memphis.station({
+                        name: "<station-name>",
+                        schemaName: "<schema-name>",
+                        retentionType: memphis.retentionTypes.MAX_MESSAGE_AGE_SECONDS, // defaults to memphis.retentionTypes.MAX_MESSAGE_AGE_SECONDS
+                        retentionValue: 604800, // defaults to 604800
+                        storageType: memphis.storageTypes.DISK, // defaults to memphis.storageTypes.DISK
+                        replicas: 1, // defaults to 1
+                        idempotencyWindowMs: 0, // defaults to 120000
+                        sendPoisonMsgToDls: true, // defaults to true
+                        sendSchemaFailedMsgToDls: true // defaults to true
+                  });
+        })();
+    }
+}
+```
+
+**Retention types**
+
+Memphis currently supports the following types of retention:
+
+```js
+memphis.retentionTypes.MAX_MESSAGE_AGE_SECONDS;
+```
+
+Means that every message persists for the value set in retention value field (in seconds)
+
+```js
+memphis.retentionTypes.MESSAGES;
+```
+
+Means that after max amount of saved messages (set in retention value), the oldest messages will be deleted
+
+```js
+memphis.retentionTypes.BYTES;
+```
+
+Means that after max amount of saved bytes (set in retention value), the oldest messages will be deleted
+
+**Storage types**
+
+Memphis currently supports the following types of messages storage:
+
+```js
+memphis.storageTypes.DISK;
+```
+
+Means that messages persist on disk
+
+```js
+memphis.storageTypes.MEMORY;
+```
+
+Means that messages persist on the main memory
+
+#### Destroying a Station
+
+Destroying a station will remove all its resources (producers/consumers)
+
+```js
+await station.destroy();
+```
+
+#### Schemaverse
+Memphis Schemaverse provides a robust schema store and schema management layer on top of memphis broker without a standalone compute or dedicated resources.
+
+**Attaching a Schema to an Existing Station**
+
+```js
+await memphisConnection.attachSchema({ name: '<schema-name>', stationName: '<station-name>' });
+```
+
+**Detaching a Schema from Station**
+
+```js
+await memphisConnection.detachSchema({ stationName: '<station-name>' });
+```
+
+#### Produce and Consume messages
+
+The most common client operations are `produce` to send messages and `consume` to
+receive messages.<br>
+
+Messages are published to a station and consumed from it by creating a consumer.<br>
+Consumers are pull based and consume all the messages in a station unless you are using a consumers group, in this case messages are spread across all members in this group.<br>
+
+Memphis messages are payload agnostic. Payloads are `Uint8Arrays`.
+
+In order to stop getting messages, you have to call `consumer.destroy()`.<br>Destroy will terminate regardless
+of whether there are messages in flight for the client.
+
+**Creating a Producer**
+```js
+@Module({
+    imports: [MemphisModule.register()],
+})
+
+class ProducerModule {
+    constructor(private memphis: MemphisService) { }
+
+    createProducer() {
+        (async function () {
+                const producer = await memphisConnection.producer({
+                    stationName: "<station-name>",
+                    producerName: "<producer-name>"
+                });
+        })();
+    }
+}
+```
+
+#### Producing a message
+```js
+await producer.produce({
+    message: '<bytes array>/object/string/DocumentNode graphql', // Uint8Arrays/object (schema validated station - protobuf) or Uint8Arrays/object (schema validated station - json schema) or Uint8Arrays/string/DocumentNode graphql (schema validated station - graphql schema)
+    ackWaitSec: 15 // defaults to 15
+});
+```
+
+#### Add Header
+
+```js
+const headers = memphis.headers();
+headers.add('<key>', '<value>');
+await producer.produce({
+    message: '<bytes array>/object/string/DocumentNode graphql', // Uint8Arrays/object (schema validated station - protobuf) or Uint8Arrays/object (schema validated station - json schema) or Uint8Arrays/string/DocumentNode graphql (schema validated station - graphql schema)
+    headers: headers // defults to empty
+});
+```
+
+#### Async produce
+
+Meaning your application won't wait for broker acknowledgement - use only in case you are tolerant for data loss
+
+```js
+await producer.produce({
+    message: '<bytes array>/object/string/DocumentNode graphql', // Uint8Arrays/object (schema validated station - protobuf) or Uint8Arrays/object (schema validated station - json schema) or Uint8Arrays/string/DocumentNode graphql (schema validated station - graphql schema)
+    ackWaitSec: 15, // defaults to 15
+    asyncProduce: true // defaults to false
+});
+```
+
+#### Message ID
+
+Stations are idempotent by default for 2 minutes (can be configured), Idempotency achieved by adding a message id
+
+```js
+await producer.produce({
+    message: '<bytes array>/object/string/DocumentNode graphql', // Uint8Arrays/object (schema validated station - protobuf) or Uint8Arrays/object (schema validated station - json schema) or Uint8Arrays/string/DocumentNode graphql (schema validated station - graphql schema)
+    ackWaitSec: 15, // defaults to 15
+    msgId: 'fdfd' // defaults to null
+});
+```
+
+#### Destroying a Producer
+
+```js
+await producer.destroy();
+```
+
+#### Creating a Consumer
+
+```js
+const consumer = await memphisConnection.consumer({
+    stationName: '<station-name>',
+    consumerName: '<consumer-name>',
+    consumerGroup: '<group-name>', // defaults to the consumer name.
+    pullIntervalMs: 1000, // defaults to 1000
+    batchSize: 10, // defaults to 10
+    batchMaxTimeToWaitMs: 5000, // defaults to 5000
+    maxAckTimeMs: 30000, // defaults to 30000
+    maxMsgDeliveries: 10, // defaults to 10
+    genUniqueSuffix: false
+});
+```
+
+To set Up connection in nestjs
+
+```js
+import { MemphisServer } from 'memphis-dev/nest'
+
+async function bootstrap() {
+  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
+    AppModule,
+    {
+      strategy: new MemphisServer({
+        host: '<memphis-host>',
+        username: '<application type username>',
+        connectionToken: '<broker-token>'
+      }),
+    },
+  );
+
+  await app.listen();
+}
+bootstrap();
+```
+
+To Consume messages in nestjs
+
+```js
+export class Controller {
+    import { consumeMessage } from 'memphis-dev/nest';
+    import { Message } from 'memphis-dev/types';
+
+    @consumeMessage({
+        stationName: '<station-name>',
+        consumerName: '<consumer-name>',
+        consumerGroup: ''
+    })
+    async messageHandler(message: Message) {
+        console.log(message.getData().toString());
+        message.ack();
+    }
+}
+```
+
+#### Processing messages
+
+```js
+consumer.on('message', (message) => {
+    // processing
+    console.log(message.getData());
+    message.ack();
+});
+```
+
+#### Acknowledge a message
+
+Acknowledge a message indicates the Memphis server to not re-send the same message again to the same consumer / consumers group
+
+```js
+message.ack();
+```
+
+#### Get headers
+
+Get headers per message
+
+```js
+headers = message.getHeaders();
+```
+
+#### Catching async errors
+
+```js
+consumer.on('error', (error) => {
+    // error handling
+});
+```
+
+#### Destroying a Consumer
+
+```js
+await consumer.destroy();
 ```
