@@ -1,13 +1,34 @@
-### NATS
+### Memphis.dev
 
-[NATS](https://nats.io) is a simple, secure and high performance open source messaging system for cloud native applications, IoT messaging, and microservices architectures. The NATS server is written in the Go programming language, but client libraries to interact with the server are available for dozens of major programming languages. NATS supports both **At Most Once** and **At Least Once** delivery. It can run anywhere, from large servers and cloud instances, through edge gateways and even Internet of Things devices.
+Simple as RabbitMQ, robust as Kafka, and perfect for busy developers.<br><br>
+[Memphis](https://memphis.dev) is a next-generation message broker.<br>
+A simple, robust, and durable cloud-native message broker wrapped with
+an entire ecosystem that enables fast and reliable development of next-generation event-driven application.
+
+Memphis enables building next-generation applications that require large volumes of streamed and enriched data,
+modern protocols, zero ops, rapid development, extreme cost reduction,
+and a significantly lower amount of dev time for data-oriented developers and data engineers.
+
+Some of Memphis features:
+- 🚀 Fully optimized message broker in under 3 minutes
+- 💻 Easy-to-use UI, CLI, and SDKs
+- 📺 Data-level observability
+- ☠️ Dead-Letter Queue with automatic message retransmit
+- 🔤 Schemaverse - Embedded schema management for produced data (Protobuf/JSON/GraphQL/Avro)
+- ⛓ SDKs: Node.JS, Go, Python, TypeScript, NestJS
+- 🐳☸ Runs on any Docker or Kubernetes
+- 👨‍💻 Community driven
+
+[Github](https://github.com/memphisdev/memphis-broker)
+
+<br>
 
 #### Installation
 
-To start building NATS-based microservices, first install the required package:
+To start using Memphis, first install the required package:
 
 ```bash
-$ npm i --save nats
+$ npm i --save memphis-dev
 ```
 
 #### Overview
